@@ -1,0 +1,14 @@
+Welcome to AI Tech Radio — your daily briefing on artificial intelligence
+and front-end development, powered entirely by local AI running on your machine!
+
+Today's headline: the open-source community continues to push the boundaries
+of what's possible with small language models. Researchers have demonstrated
+that carefully fine-tuned 1-billion-parameter models can match the reasoning
+quality of much larger counterparts on domain-specific tasks.
+
+On the React side, the ecosystem is embracing server components at a rapid
+pace. Developers are reporting up to 40% reductions in bundle sizes after
+migrating to the new App Router paradigm in Next.js 14.
+
+That's all for today's AI Tech Radio digest. Stay curious, keep building,
+and we'll see you next time!
