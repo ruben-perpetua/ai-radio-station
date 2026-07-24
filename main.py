@@ -36,15 +36,15 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-# ── Make sure we can import sibling modules regardless of cwd ─────────────────
+# ── Make sure we can import the ai_radio package regardless of cwd ────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
-from modules.m1_local_llm import LocalLLMClient
-from modules.m3_vector_store import VectorStore
-from modules.m4_rag_engine import RAGEngine
-from modules.m5_agents import RadioAgent
-from modules.m6_mcp_registry import MCPRegistry
-from tts_engine import TTSEngine
+from ai_radio.llm.client import LocalLLMClient
+from ai_radio.retrieval.vector_store import VectorStore
+from ai_radio.retrieval.rag_engine import RAGEngine
+from ai_radio.agents.radio_agent import RadioAgent
+from ai_radio.agents.tool_registry import MCPRegistry
+from ai_radio.audio.tts_engine import TTSEngine
 
 
 # ── Visual helpers ────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ def main() -> None:
         warn(
             "No trained adapter yet.\n"
             "     Run the fine-tuning demo separately:\n"
-            "       python -m modules.m2_fine_tune\n"
+            "       python -m ai_radio.training.fine_tuning\n"
             "     This fine-tunes DistilGPT-2 on 15 radio-style examples\n"
             "     using LoRA (< 1% trainable params) — takes ~30s on CPU."
         )
@@ -219,7 +219,7 @@ def main() -> None:
     print()
     print("  Modules demonstrated:")
     print("    ✓ Module 1 — Local LLM (Ollama on-premises inference)")
-    print("    ✓ Module 2 — Fine-Tuning (LoRA config ready, run m2_fine_tune.py)")
+    print("    ✓ Module 2 — Fine-Tuning (LoRA config ready, run ai_radio.training.fine_tuning)")
     print("    ✓ Module 3 — Vector Database (ChromaDB semantic store)")
     print("    ✓ Module 4 — RAG (retrieval-augmented script generation)")
     print("    ✓ Module 5 — Agentic AI (ReAct news collection agent)")

@@ -26,8 +26,8 @@ import textwrap
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from .m1_local_llm import LocalLLMClient
-from .m3_vector_store import VectorStore
+from ..llm.client import LocalLLMClient
+from .vector_store import VectorStore
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 

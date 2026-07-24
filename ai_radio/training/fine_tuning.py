@@ -17,7 +17,7 @@ larger models (LLaMA, Mistral, etc.) — only the base_model changes.
 
 Run standalone
 --------------
-  python -m modules.m2_fine_tune
+  python -m ai_radio.training.fine_tuning
 
 Requirements (separate from the core POC)
 ------------------------------------------

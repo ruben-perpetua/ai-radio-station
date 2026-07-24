@@ -31,8 +31,8 @@ from typing import Any, Dict, List, Optional
 
 import feedparser
 
-from .m6_mcp_registry import MCPRegistry
-from .m3_vector_store import VectorStore
+from .tool_registry import MCPRegistry
+from ..retrieval.vector_store import VectorStore
 
 # ── RSS sources ───────────────────────────────────────────────────────────────
 
@@ -220,22 +220,57 @@ class RadioAgent:
 
 def _fetch_rss(url: str, source: str, max_items: int) -> List[Dict[str, Any]]:
     """
-    Parses an RSS/Atom feed and returns normalised article dicts.
-    Gracefully handles feeds with missing fields.
+    Parses an RSS/Atom feed, then fetches the full article text for each entry.
+    Falls back to the RSS summary if full content scraping fails.
     """
     feed = feedparser.parse(url)
     articles = []
     for entry in feed.entries[:max_items]:
+        # ── RSS summary (always available, used as fallback) ──────────────────
         summary = getattr(entry, "summary", "") or ""
-        # Strip HTML tags from summary
         summary = re.sub(r"<[^>]+>", " ", summary).strip()
         summary = re.sub(r"\s+", " ", summary)[:400]
+
+        article_url = getattr(entry, "link", url)
+
+        # ── Full article content (scraped from the article page) ──────────────
+        full_content = _fetch_full_content(article_url)
+        if full_content:
+            print(f"    [scrape] {len(full_content)} chars from {article_url[:60]}...")
+        else:
+            full_content = summary   # graceful fallback
 
         articles.append({
             "title": getattr(entry, "title", "No title"),
             "summary": summary,
-            "url": getattr(entry, "link", url),
+            "full_content": full_content,
+            "url": article_url,
             "published": getattr(entry, "published", ""),
             "source": source,
         })
+        time.sleep(0.3)   # polite delay between article fetches
     return articles
+
+
+def _fetch_full_content(url: str) -> Optional[str]:
+    """
+    Scrapes the full article text from a URL using trafilatura.
+    Returns None if scraping fails or content is too short to be useful.
+    trafilatura automatically removes navigation, ads, and boilerplate.
+    """
+    try:
+        import trafilatura
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            return None
+        text = trafilatura.extract(
+            downloaded,
+            include_comments=False,
+            include_tables=False,
+            no_fallback=False,
+        )
+        if text and len(text) > 150:          # ignore near-empty pages
+            return text[:5000]                # cap at 5000 chars (~750 words)
+    except Exception:
+        pass
+    return None

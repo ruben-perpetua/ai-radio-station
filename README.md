@@ -105,7 +105,7 @@ python main.py --model llama3.2 # use the 3B model for better quality
 pip install transformers torch peft datasets accelerate
 
 # Run the LoRA fine-tuning demo on DistilGPT-2
-python -m modules.m2_fine_tune
+python -m ai_radio.training.fine_tuning
 ```
 
 This will:
@@ -125,7 +125,7 @@ After a successful run you will find:
 output/
 ├── script.txt                      # generated radio script
 ├── radio_episode_YYYYMMDD_HHMMSS.mp3  # audio broadcast
-└── finetuned_model/                # LoRA adapter (after m2_fine_tune.py)
+└── finetuned_model/                # LoRA adapter (after fine_tuning.py)
 chroma_data/                        # persistent vector store
 ```
 
@@ -135,15 +135,20 @@ chroma_data/                        # persistent vector store
 
 ```
 ai_tech_radio/
-├── main.py                         # Pipeline orchestrator
-├── tts_engine.py                   # Text-to-Speech (gTTS / pyttsx3 / say)
-├── modules/
-│   ├── m1_local_llm.py             # Module 1 — Ollama client
-│   ├── m2_fine_tune.py             # Module 2 — LoRA fine-tuning demo
-│   ├── m3_vector_store.py          # Module 3 — ChromaDB vector store
-│   ├── m4_rag_engine.py            # Module 4 — RAG pipeline
-│   ├── m5_agents.py                # Module 5 — ReAct news agent
-│   └── m6_mcp_registry.py          # Module 6 — MCP tool registry
+├── main.py                          # Pipeline orchestrator
+├── ai_radio/                        # Application package
+│   ├── llm/
+│   │   └── client.py                # Module 1 — Ollama client
+│   ├── retrieval/
+│   │   ├── vector_store.py          # Module 3 — ChromaDB vector store
+│   │   └── rag_engine.py            # Module 4 — RAG pipeline
+│   ├── agents/
+│   │   ├── radio_agent.py           # Module 5 — ReAct news agent
+│   │   └── tool_registry.py         # Module 6 — MCP tool registry
+│   ├── audio/
+│   │   └── tts_engine.py            # Text-to-Speech (gTTS / pyttsx3 / say)
+│   └── training/
+│       └── fine_tuning.py           # Module 2 — LoRA fine-tuning demo
 ├── requirements.txt
 └── setup.sh
 ```
@@ -156,7 +161,7 @@ ai_tech_radio/
 2. `python main.py --mock --no-audio` — show all 6 modules initialising and the agent reasoning trace
 3. `python main.py --mock` — let TTS convert the script and **play the audio**
 4. **Show `output/script.txt`** — the RAG-grounded radio script
-5. **Open `modules/m2_fine_tune.py`** — walk through the LoRA config
+5. **Open `ai_radio/training/fine_tuning.py`** — walk through the LoRA config
 6. (Optional) `python main.py --reset-db` — show live RSS fetch + real LLM if Ollama is running
 
 ---

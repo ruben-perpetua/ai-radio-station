@@ -15,6 +15,9 @@ requests>=2.31.0            # Ollama API + RSS fallback (Module 1)
 gTTS>=2.5.0                 # Google TTS — online, high quality (TTS engine)
 pyttsx3>=2.90               # Offline TTS fallback (TTS engine)
 
+# ── Full article scraping + chunking ────────────────────────────────────────
+trafilatura>=1.6.0          # Extracts clean article text from any webpage
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 pydantic>=2.0               # Data validation
 
