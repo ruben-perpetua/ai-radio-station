@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 import feedparser
+import requests
 
 from .tool_registry import MCPRegistry
 from ..retrieval.vector_store import VectorStore
@@ -66,11 +68,15 @@ class RadioAgent:
         self,
         registry: MCPRegistry,
         vector_store: VectorStore,
-        llm=None,   # Optional[LocalLLMClient]
+        llm=None,   # Optional[LLMClient]
+        feeds: Optional[List[Dict[str, str]]] = None,
+        max_articles_per_feed: int = MAX_ARTICLES_PER_FEED,
     ):
         self.registry = registry
         self.vector_store = vector_store
         self.llm = llm
+        self.feeds = feeds if feeds is not None else RSS_FEEDS
+        self.max_articles_per_feed = max_articles_per_feed
         self._reasoning_trace: List[str] = []
         self._register_tools()
 
@@ -90,8 +96,8 @@ class RadioAgent:
             returns="List[Article]  — each has title, summary, url, published, source",
             tags=["news", "collection"],
         )
-        def fetch_rss_feed(url: str, source: str = "unknown", max_items: int = MAX_ARTICLES_PER_FEED):
-            return _fetch_rss(url, source, max_items)
+        def fetch_rss_feed(url: str, source: str = "unknown", max_items: int = None):
+            return _fetch_rss(url, source, max_items or self.max_articles_per_feed)
 
         @self.registry.tool(
             name="store_articles",
@@ -148,7 +154,7 @@ class RadioAgent:
 
         # ── Phase 1: Collect from all feeds ───────────────────────────────────
         self._think("Phase 1 — Iterating through RSS feeds.")
-        for feed in RSS_FEEDS:
+        for feed in self.feeds:
             self._think(f"Fetching feed: {feed['source']} ({feed['url']})")
             try:
                 articles = self.registry.execute(
@@ -218,37 +224,71 @@ class RadioAgent:
 
 # ── RSS helpers ───────────────────────────────────────────────────────────────
 
+MAX_SCRAPE_WORKERS = 8
+FEED_TIMEOUT_S = 10      # bound RSS feed fetch — prevents indefinite hangs on slow/unreachable feeds
+ARTICLE_TIMEOUT_S = 8    # bound each article page fetch
+REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AiTechRadio/1.0)"}
+
+
 def _fetch_rss(url: str, source: str, max_items: int) -> List[Dict[str, Any]]:
     """
-    Parses an RSS/Atom feed, then fetches the full article text for each entry.
+    Parses an RSS/Atom feed, then fetches the full article text for each entry
+    concurrently (thread pool — full-content scraping is I/O bound and was the
+    main bottleneck when done sequentially).
     Falls back to the RSS summary if full content scraping fails.
+
+    The feed itself is fetched with an explicit timeout (`feedparser.parse()`
+    has none, and could otherwise hang indefinitely on a slow/unreachable feed).
     """
-    feed = feedparser.parse(url)
-    articles = []
+    try:
+        resp = requests.get(url, timeout=FEED_TIMEOUT_S, headers=REQUEST_HEADERS)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.content)
+    except Exception as exc:
+        print(f"    [feed] FAILED to fetch {source} ({url[:60]}...): {exc}")
+        return []
+
+    stubs = []
     for entry in feed.entries[:max_items]:
         # ── RSS summary (always available, used as fallback) ──────────────────
         summary = getattr(entry, "summary", "") or ""
         summary = re.sub(r"<[^>]+>", " ", summary).strip()
         summary = re.sub(r"\s+", " ", summary)[:400]
 
-        article_url = getattr(entry, "link", url)
-
-        # ── Full article content (scraped from the article page) ──────────────
-        full_content = _fetch_full_content(article_url)
-        if full_content:
-            print(f"    [scrape] {len(full_content)} chars from {article_url[:60]}...")
-        else:
-            full_content = summary   # graceful fallback
-
-        articles.append({
+        stubs.append({
             "title": getattr(entry, "title", "No title"),
             "summary": summary,
-            "full_content": full_content,
-            "url": article_url,
+            "url": getattr(entry, "link", url),
             "published": getattr(entry, "published", ""),
             "source": source,
         })
-        time.sleep(0.3)   # polite delay between article fetches
+
+    if not stubs:
+        return []
+
+    # ── Full article content (scraped concurrently from each article page) ────
+    articles: List[Dict[str, Any]] = []
+    workers = min(MAX_SCRAPE_WORKERS, len(stubs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_stub = {
+            pool.submit(_fetch_full_content, stub["url"]): stub for stub in stubs
+        }
+        for future in as_completed(future_to_stub):
+            stub = future_to_stub[future]
+            try:
+                # requests' timeout applies separately to connect+read, so the
+                # worst case is ~2x ARTICLE_TIMEOUT_S; give a small buffer on top.
+                full_content = future.result(timeout=(ARTICLE_TIMEOUT_S * 2) + 2)
+            except Exception:
+                full_content = None
+
+            if full_content:
+                print(f"    [scrape] {len(full_content)} chars from {stub['url'][:60]}...")
+            else:
+                full_content = stub["summary"]   # graceful fallback
+
+            articles.append({**stub, "full_content": full_content})
+
     return articles
 
 
@@ -257,14 +297,17 @@ def _fetch_full_content(url: str) -> Optional[str]:
     Scrapes the full article text from a URL using trafilatura.
     Returns None if scraping fails or content is too short to be useful.
     trafilatura automatically removes navigation, ads, and boilerplate.
+
+    Uses `requests` (with an explicit timeout) to download the page rather
+    than `trafilatura.fetch_url()`, which has no configurable timeout and
+    can hang indefinitely on a slow or unreachable site.
     """
     try:
         import trafilatura
-        downloaded = trafilatura.fetch_url(url)
-        if not downloaded:
-            return None
+        resp = requests.get(url, timeout=ARTICLE_TIMEOUT_S, headers=REQUEST_HEADERS)
+        resp.raise_for_status()
         text = trafilatura.extract(
-            downloaded,
+            resp.text,
             include_comments=False,
             include_tables=False,
             no_fallback=False,

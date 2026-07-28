@@ -26,16 +26,18 @@ import textwrap
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from ..llm.client import LocalLLMClient
+from ..llm.base import LLMClient
 from .vector_store import VectorStore
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are an enthusiastic tech radio host for "AI Tech Radio."
+DEFAULT_TOPICS = ["AI", "machine learning", "React", "JavaScript"]
+
+SYSTEM_PROMPT_TEMPLATE = """You are an enthusiastic tech radio host for "AI Tech Radio."
 Your job is to write engaging, concise radio scripts based on real news articles.
 Rules:
 - Sound conversational and energetic — you're on air!
-- Cover both AI/ML and React/front-end news
+- Cover news from these topics: {topics}
 - Keep it under 2 minutes of speaking time (~300 words)
 - Begin with a catchy opening and end with a sign-off
 - Do NOT fabricate news — only use information from the provided articles
@@ -53,8 +55,8 @@ Today's date: {date}
 
 Write the radio script now. Start directly with the script — no preamble:"""
 
-QUERY_EXPANSION_PROMPT = """Generate 3 search queries (one per line, no numbering) to retrieve
-relevant news articles for a tech radio show focused on AI and React development.
+QUERY_EXPANSION_TEMPLATE = """Generate {n} search queries (one per line, no numbering) to retrieve
+relevant news articles for a tech radio show focused on: {topics}.
 Keep each query under 10 words. Output only the queries."""
 
 
@@ -64,30 +66,42 @@ class RAGEngine:
 
     Retrieves semantically relevant articles from the vector store,
     assembles them into an augmented context window, and calls the
-    local LLM to generate a grounded radio script.
+    LLM to generate a grounded radio script. Topics, query count,
+    result count, and per-article diversity are all configurable
+    (see `config.toml` → `[topics]` / `[rag]`).
     """
 
     def __init__(
         self,
-        llm: LocalLLMClient,
+        llm: LLMClient,
         vector_store: VectorStore,
-        n_results: int = 6,
+        topics: Optional[List[str]] = None,
+        n_queries: int = 3,
+        n_results: int = 12,
+        max_chunks_per_article: int = 2,
     ):
         self.llm = llm
         self.vector_store = vector_store
+        self.topics = topics or DEFAULT_TOPICS
+        self.n_queries = max(1, n_queries)
         self.n_results = n_results
+        self.max_chunks_per_article = max_chunks_per_article
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def generate_radio_script(
         self,
-        base_query: str = "latest AI machine learning React JavaScript news",
+        base_query: Optional[str] = None,
     ) -> str:
         """
         Full RAG pipeline: retrieve → augment → generate.
 
+        `base_query` defaults to a query built from the configured topics.
         Returns a radio-ready script string.
         """
+        if base_query is None:
+            base_query = "latest " + " ".join(self.topics) + " news"
+
         print("  > Step 1/4 — Query expansion")
         queries = self._expand_query(base_query)
         print(f"    Queries: {queries}")
@@ -105,12 +119,13 @@ class RAGEngine:
         print("  > Step 3/4 — Assembling augmented context")
         context = self._build_context(docs)
 
-        print("  > Step 4/4 — Generating script via Local LLM")
+        print("  > Step 4/4 — Generating script via LLM")
         prompt = SCRIPT_TEMPLATE.format(
             context=context,
             date=datetime.now().strftime("%B %d, %Y"),
         )
-        script = self.llm.generate(prompt, system=SYSTEM_PROMPT, temperature=0.75)
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(topics=", ".join(self.topics))
+        script = self.llm.generate(prompt, system=system_prompt, temperature=0.75)
         return script
 
     # ── Internal helpers ──────────────────────────────────────────────────────
@@ -118,39 +133,52 @@ class RAGEngine:
     def _expand_query(self, base_query: str) -> List[str]:
         """
         Query expansion: ask the LLM for related search terms to improve recall.
-        Falls back to a fixed list when the LLM is in mock mode.
+        Falls back to a fixed list (derived from configured topics) in mock mode.
         """
         if self.llm._mock_mode:
-            return [
-                base_query,
-                "large language models open-source fine-tuning",
-                "React server components Next.js 2024",
-            ]
+            fallback = [base_query]
+            fallback += [f"latest {topic} news" for topic in self.topics]
+            return fallback[: self.n_queries]
         try:
             raw = self.llm.generate(
-                QUERY_EXPANSION_PROMPT,
+                QUERY_EXPANSION_TEMPLATE.format(
+                    n=self.n_queries - 1,
+                    topics=", ".join(self.topics),
+                ),
                 temperature=0.3,
-                max_tokens=80,
+                max_tokens=120,
             )
             queries = [line.strip() for line in raw.splitlines() if line.strip()]
-            return [base_query] + queries[:2]   # base + 2 expansions
+            return [base_query] + queries[: self.n_queries - 1]   # base + expansions
         except Exception:
             return [base_query]
 
     def _retrieve(self, queries: List[str]) -> List[Dict]:
         """
-        Multi-query retrieval: run each query and de-duplicate by URL.
+        Multi-query retrieval with per-article diversity capping.
+
+        Runs each expanded query, de-duplicates identical chunks across
+        queries, and caps how many chunks from any single article URL can
+        appear in the results (`max_chunks_per_article`) — this prevents
+        one long article from dominating the LLM context window.
         """
-        seen_urls: set = set()
+        seen_chunks: set = set()
+        per_article_count: Dict[str, int] = {}
         results: List[Dict] = []
+
         for query in queries:
             for doc in self.vector_store.search(query, n_results=self.n_results):
-                if doc["url"] not in seen_urls:
-                    seen_urls.add(doc["url"])
-                    results.append(doc)
-        # Sort by similarity score descending and cap at n_results * 2
+                key = (doc["url"], doc["content"])
+                if key in seen_chunks:
+                    continue
+                if per_article_count.get(doc["url"], 0) >= self.max_chunks_per_article:
+                    continue
+                seen_chunks.add(key)
+                per_article_count[doc["url"]] = per_article_count.get(doc["url"], 0) + 1
+                results.append(doc)
+
         results.sort(key=lambda d: d["similarity"], reverse=True)
-        return results[: self.n_results * 2]
+        return results[: self.n_results]
 
     def _build_context(self, docs: List[Dict]) -> str:
         """

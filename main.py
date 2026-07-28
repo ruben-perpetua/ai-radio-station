@@ -39,7 +39,8 @@ from pathlib import Path
 # ── Make sure we can import the ai_radio package regardless of cwd ────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ai_radio.llm.client import LocalLLMClient
+from ai_radio.config import load_config
+from ai_radio.llm.factory import LLMClientFactory
 from ai_radio.retrieval.vector_store import VectorStore
 from ai_radio.retrieval.rag_engine import RAGEngine
 from ai_radio.agents.radio_agent import RadioAgent
@@ -73,7 +74,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mock",     action="store_true", help="Force mock LLM (no Ollama needed)")
     p.add_argument("--no-audio", action="store_true", help="Skip TTS — output text only")
     p.add_argument("--reset-db", action="store_true", help="Clear the vector store before run")
-    p.add_argument("--model",    default="llama3.2:1b", help="Ollama model name")
+    p.add_argument("--skip-fetch", action="store_true", help="Reuse the existing vector store — skip RSS fetch/scrape (fast iteration)")
+    p.add_argument("--provider", choices=["ollama", "openai"], help="Override llm.provider from config.toml")
+    p.add_argument("--model",    help="Override llm.model from config.toml")
     return p.parse_args()
 
 
@@ -81,6 +84,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    config = load_config()
+
+    if args.provider:
+        config.llm.provider = args.provider
+    if args.model:
+        config.llm.model = args.model
 
     # ─────────────────────────────────────────────────────────────────────────
     print(f"\n{'=' * W}")
@@ -98,10 +107,10 @@ def main() -> None:
     ok(f"MCPRegistry created: {registry}")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Module 1 — Local LLM
+    # Module 1 — LLM (multi-provider: Ollama or OpenAI, per config.toml)
     # ─────────────────────────────────────────────────────────────────────────
-    section("Module 1", "Local LLM — Connecting to Ollama")
-    llm = LocalLLMClient(model=args.model)
+    section("Module 1", f"LLM ({config.llm.provider}) — Connecting")
+    llm = LLMClientFactory.from_config(config.llm)
     if args.mock:
         llm._mock_mode = True
         warn("Mock mode forced via --mock flag.")
@@ -110,7 +119,7 @@ def main() -> None:
 
     if not llm._mock_mode:
         models = llm.list_models()
-        ok(f"Ollama live  |  model: {args.model}  |  installed: {models}")
+        ok(f"{config.llm.provider} live  |  model: {config.llm.model}  |  installed: {models}")
     else:
         warn("Running in MOCK mode — script will use a canned template.")
 
@@ -118,7 +127,7 @@ def main() -> None:
     # Module 3 — Vector Database
     # ─────────────────────────────────────────────────────────────────────────
     section("Module 3", "Vector Database — Initialising ChromaDB")
-    vector_store = VectorStore()
+    vector_store = VectorStore(chunk_size=config.rag.chunk_size, overlap=config.rag.overlap)
 
     if args.reset_db:
         vector_store.reset()
@@ -134,24 +143,37 @@ def main() -> None:
     # Modules 5 + 6 — Agentic News Collection via MCP Tools
     # ─────────────────────────────────────────────────────────────────────────
     section("Modules 5 + 6", "Agentic AI — Launching ReAct News Collector")
-    print(
-        "  The agent will autonomously decide which RSS feeds to query,\n"
-        "  fetch articles, and index them — using MCP-registered tools."
-    )
-    print()
 
-    agent = RadioAgent(registry=registry, vector_store=vector_store, llm=llm)
-    articles = agent.collect_and_index_news()
+    if args.skip_fetch and stats.get("total_documents", 0) > 0:
+        warn("--skip-fetch: reusing existing vector store, RSS collection skipped.")
+        articles: list = []
+    else:
+        if args.skip_fetch:
+            warn("--skip-fetch requested but vector store is empty — fetching anyway.")
+        print(
+            "  The agent will autonomously decide which RSS feeds to query,\n"
+            "  fetch articles, and index them — using MCP-registered tools."
+        )
+        print()
 
-    print()
-    ok(f"Agent finished  |  {len(articles)} articles collected")
-    mcp_stats = registry.get_stats()
-    ok(
-        f"MCP calls: {mcp_stats['total_calls']}  |  "
-        f"success rate: {mcp_stats['success_rate']:.0%}  |  "
-        f"avg latency: {mcp_stats['avg_duration_ms']:.0f} ms"
-    )
-    ok(f"Tools used: {mcp_stats['tools_used']}")
+        agent = RadioAgent(
+            registry=registry,
+            vector_store=vector_store,
+            llm=llm,
+            feeds=[{"url": f.url, "source": f.source} for f in config.feeds] or None,
+            max_articles_per_feed=config.rag.articles_per_feed,
+        )
+        articles = agent.collect_and_index_news()
+
+        print()
+        ok(f"Agent finished  |  {len(articles)} articles collected")
+        mcp_stats = registry.get_stats()
+        ok(
+            f"MCP calls: {mcp_stats['total_calls']}  |  "
+            f"success rate: {mcp_stats['success_rate']:.0%}  |  "
+            f"avg latency: {mcp_stats['avg_duration_ms']:.0f} ms"
+        )
+        ok(f"Tools used: {mcp_stats['tools_used']}")
 
     final_stats = vector_store.get_stats()
     ok(
@@ -163,7 +185,14 @@ def main() -> None:
     # Modules 4 + 1 — RAG Pipeline → Script Generation
     # ─────────────────────────────────────────────────────────────────────────
     section("Modules 4 + 1", "RAG — Retrieving context → Generating radio script")
-    rag = RAGEngine(llm=llm, vector_store=vector_store)
+    rag = RAGEngine(
+        llm=llm,
+        vector_store=vector_store,
+        topics=config.topics.focus,
+        n_queries=config.rag.n_queries,
+        n_results=config.rag.n_results,
+        max_chunks_per_article=config.rag.max_chunks_per_article,
+    )
     script = rag.generate_radio_script()
 
     # Save script to disk
@@ -218,7 +247,7 @@ def main() -> None:
         print(f"  Audio   : output/radio_episode_*.mp3")
     print()
     print("  Modules demonstrated:")
-    print("    ✓ Module 1 — Local LLM (Ollama on-premises inference)")
+    print(f"    ✓ Module 1 — LLM ({config.llm.provider} — {config.llm.model})")
     print("    ✓ Module 2 — Fine-Tuning (LoRA config ready, run ai_radio.training.fine_tuning)")
     print("    ✓ Module 3 — Vector Database (ChromaDB semantic store)")
     print("    ✓ Module 4 — RAG (retrieval-augmented script generation)")

@@ -40,8 +40,13 @@ class VectorStore:
         self,
         persist_dir: str = PERSIST_DIR,
         collection_name: str = COLLECTION_NAME,
+        chunk_size: int = 150,
+        overlap: int = 30,
     ):
         os.makedirs(persist_dir, exist_ok=True)
+
+        self.chunk_size = chunk_size
+        self.overlap = overlap
 
         self._client = chromadb.PersistentClient(path=persist_dir)
         self._embed_fn = SentenceTransformerEmbeddingFunction(
@@ -71,21 +76,26 @@ class VectorStore:
             return 0
 
         existing_ids = set(self._collection.get()["ids"])
+        seen_in_batch = set()   # guards against the same URL appearing twice in one batch
 
         docs, metas, ids = [], [], []
         for art in articles:
             base_id = _make_id(art["url"])
 
-            # Skip if this article was already indexed (check first chunk)
+            # Skip if this article was already indexed (check first chunk),
+            # or if it's a duplicate URL within this same batch.
             if f"{base_id}_c0" in existing_ids or base_id in existing_ids:
                 continue
+            if base_id in seen_in_batch:
+                continue
+            seen_in_batch.add(base_id)
 
             # Use full article content when available, else fall back to summary
             content = art.get("full_content") or art.get("summary", "")
             full_text = f"{art['title']}. {content}"
 
-            # Split into overlapping chunks (150 words, 30-word overlap)
-            chunks = _chunk_text(full_text, chunk_size=150, overlap=30)
+            # Split into overlapping chunks, breaking at sentence boundaries
+            chunks = _chunk_text(full_text, chunk_size=self.chunk_size, overlap=self.overlap)
 
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{base_id}_c{i}"
@@ -184,26 +194,64 @@ def _make_id(url: str) -> str:
 
 def _chunk_text(text: str, chunk_size: int = 150, overlap: int = 30) -> List[str]:
     """
-    Split text into overlapping word-based chunks.
+    Split text into overlapping chunks, preferring sentence boundaries.
 
-    Why word-based (not character-based)?
-    Because the embedding model (all-MiniLM-L6-v2) has a 256-token limit.
-    ~150 words stays comfortably within that limit.
+    Why sentence-aware (not just word-count)?
+    A plain word-count split can cut a sentence in half across two chunks,
+    which hurts embedding quality. This accumulates whole sentences (via
+    nltk's `sent_tokenize`) until the word budget is hit, then starts a
+    new chunk carrying `overlap` words forward for context continuity.
+    Falls back to plain word-count chunking if nltk is unavailable.
 
     Why overlapping?
-    A sentence split across two chunk boundaries would lose context.
-    Overlap of 30 words ensures every idea is fully represented in at
-    least one chunk.
+    An idea split across two chunk boundaries would lose context — overlap
+    ensures every idea is fully represented in at least one chunk.
+    """
+    words = text.split()
+    if len(words) <= chunk_size:
+        return [text]   # short enough — no splitting needed
+
+    sentences = _sentence_split(text)
+    if not sentences:
+        return _chunk_words(words, chunk_size, overlap)
+
+    chunks: List[str] = []
+    current: List[str] = []
+
+    for sentence in sentences:
+        sent_words = sentence.split()
+        if current and len(current) + len(sent_words) > chunk_size:
+            chunks.append(" ".join(current))
+            current = current[-overlap:] if overlap else []
+        current.extend(sent_words)
+
+    if current:
+        chunks.append(" ".join(current))
+
+    return chunks if chunks else [text]
+
+
+def _sentence_split(text: str) -> Optional[List[str]]:
+    """Attempts sentence tokenization via nltk; downloads data on first use."""
+    try:
+        import nltk
+        try:
+            return nltk.sent_tokenize(text)
+        except LookupError:
+            nltk.download("punkt_tab", quiet=True)
+            return nltk.sent_tokenize(text)
+    except Exception:
+        return None
+
+
+def _chunk_words(words: List[str], chunk_size: int, overlap: int) -> List[str]:
+    """Fallback: plain word-count chunking (used if nltk is unavailable).
 
     Example with chunk_size=5, overlap=2:
       text:    [A B C D E F G H]
       chunk 1: [A B C D E]
       chunk 2:       [D E F G H]
     """
-    words = text.split()
-    if len(words) <= chunk_size:
-        return [text]   # short enough — no splitting needed
-
     chunks = []
     start = 0
     while start < len(words):
