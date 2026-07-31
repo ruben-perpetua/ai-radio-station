@@ -13,14 +13,17 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@mozilla/readability": "^0.5.0",
     "chromadb": "^3.5.0",
     "hono": "^4.6.13",
+    "jsdom": "^25.0.1",
     "kokoro-js": "^1.2.1",
     "openai": "^4.73.0",
     "rss-parser": "^3.13.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

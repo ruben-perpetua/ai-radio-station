@@ -8,6 +8,11 @@ const envSchema = z.object({
   CHROMA_COLLECTION: z.string().default("tech-radio"),
   KOKORO_VOICE: z.string().default("af_heart"),
   ENABLE_FULL_TEXT_EXTRACTION: z.coerce.boolean().default(false),
+  // An empty value in .env means "no token"; treat it as absent.
+  GITHUB_TOKEN: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
   PORT: z.coerce.number().default(3000),
 });
 
