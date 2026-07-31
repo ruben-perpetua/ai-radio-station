@@ -98,6 +98,47 @@ python main.py --model llama3.2 # use the 3B model for better quality
 
 ---
 
+## Web UI (dashboard)
+
+A small React + Vite dashboard lets you trigger a run and watch it live —
+pipeline progress, streaming logs, the generated script, and an audio player.
+
+```bash
+# Terminal 1 — backend API (wraps run_pipeline())
+source .venv/bin/activate
+pip install flask
+python webapp/app.py            # http://127.0.0.1:5050
+
+# Terminal 2 — frontend
+cd frontend
+npm install
+npm run dev                     # http://localhost:5173
+```
+
+Open http://localhost:5173, choose run options (mock LLM, skip fetch,
+skip audio, reset DB), optionally override the LLM provider/model, and
+click **Generate Episode**.
+
+### RAG vs No-RAG comparison
+
+Click **⚖ Compare RAG vs No-RAG** (instead of Generate) to see, side by
+side, a script generated with retrieval-augmented context vs. one
+generated purely from the LLM's own training knowledge — using the
+existing vector store (no re-fetch). This makes the value of RAG
+(grounded, current facts vs. generic/stale output) directly visible.
+
+### Settings panel
+
+The collapsible **⚙️ Settings** panel reads and writes `config.toml`
+directly (`GET`/`POST /api/config`): LLM provider/model/temperature,
+topics, RAG parameters (chunk size, overlap, n_results, etc.), audio
+settings, and RSS feeds. Changes are saved to disk immediately and take
+effect on the next run. The OpenAI API key is never read from or written
+to this file — it always comes from the `OPENAI_API_KEY` environment
+variable.
+
+---
+
 ## Module 2 — Fine-Tuning Demo (standalone)
 
 ```bash
@@ -149,6 +190,10 @@ ai_tech_radio/
 │   │   └── tts_engine.py            # Text-to-Speech (gTTS / pyttsx3 / say)
 │   └── training/
 │       └── fine_tuning.py           # Module 2 — LoRA fine-tuning demo
+├── webapp/
+│   └── app.py                       # Flask API wrapping run_pipeline()
+├── frontend/                        # React + Vite dashboard
+│   └── src/App.jsx
 ├── requirements.txt
 └── setup.sh
 ```
