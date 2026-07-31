@@ -1,7 +1,6 @@
-.venv/
-__pycache__/
-*.pyc
-chroma_data/
-output/
-.DS_Store
+node_modules/
+dist/
 .env
+data/
+*.log
+.DS_Store
