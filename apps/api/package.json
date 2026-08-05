@@ -9,6 +9,7 @@
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "ingest": "tsx --env-file-if-exists=../../.env src/ingest/ingest.ts",
     "index": "tsx --env-file-if-exists=../../.env src/index/index.ts",
+    "query": "tsx --env-file-if-exists=../../.env src/query/query.ts",
     "show:build": "tsx --env-file-if-exists=../../.env src/show/build-show.ts"
   },
   "dependencies": {
