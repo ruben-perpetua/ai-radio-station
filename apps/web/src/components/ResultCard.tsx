@@ -50,7 +50,10 @@ export function ResultCard({ item }: Props): React.JSX.Element {
             }}
           />
         </span>
-        <span className="result-distance" style={{ color: bandColor(distance) }}>
+        <span
+          className="result-distance"
+          style={{ color: bandColor(distance) }}
+        >
           {distance.toFixed(3)}
         </span>
         <span className="result-source">

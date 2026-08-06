@@ -53,7 +53,8 @@ export function DebugPanel(): React.JSX.Element {
         {stats ? (
           <>
             <strong>{stats.collection}</strong> · {stats.totalChunks} chunks ·{" "}
-            {stats.embeddingModel} · {stats.dimensions}d · {stats.distanceMetric}
+            {stats.embeddingModel} · {stats.dimensions}d ·{" "}
+            {stats.distanceMetric}
           </>
         ) : (
           "loading collection stats…"

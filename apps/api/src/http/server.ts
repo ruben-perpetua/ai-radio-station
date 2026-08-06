@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { env } from "../config/env.js";
 import { OpenAiEmbeddingProvider } from "../embeddings/openai-embeddings.js";
 import { DefaultRetriever } from "../retrieval/retriever.js";
+import { OpenAiScriptWriter } from "../script/openai-script-writer.js";
 import { ChromaStore } from "../store/chroma-store.js";
 import { createApiRoutes } from "./routes/search.js";
 
@@ -15,9 +16,10 @@ async function main(): Promise<void> {
   await store.ensureCollection(provider.modelId, provider.dimensions);
 
   const retriever = new DefaultRetriever(provider, store);
+  const writer = new OpenAiScriptWriter();
 
   const app = new Hono();
-  app.route("/api", createApiRoutes({ retriever, provider, store }));
+  app.route("/api", createApiRoutes({ retriever, provider, store, writer }));
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`API listening on http://localhost:${info.port}`);

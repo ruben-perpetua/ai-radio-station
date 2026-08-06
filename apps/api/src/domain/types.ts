@@ -32,3 +32,19 @@ export interface RetrievedChunk {
   readonly distance: number; // Chroma returns distance: lower is closer
   readonly rank: number; // 0-based position in the result list
 }
+
+export interface RadioSegment {
+  readonly id: string;
+  readonly headline: string;
+  readonly text: string;
+  readonly sourceUrls: readonly string[]; // must trace back to retrieved chunks
+}
+
+export interface RadioScript {
+  readonly showId: string;
+  readonly createdAt: string; // ISO 8601
+  readonly intro: string;
+  readonly segments: readonly RadioSegment[];
+  readonly outro: string;
+  readonly wordCount: number; // counted server-side, never model self-report
+}

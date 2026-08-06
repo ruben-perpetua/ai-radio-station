@@ -19,3 +19,18 @@ export const HN_MIN_POINTS = 50;
 
 /** How far back each run looks for fresh items. */
 export const LOOKBACK_HOURS = 24;
+
+/**
+ * One query per topic, not one broad query. A single "tech news" search returns
+ * five variations on whatever story dominates the index; retrieving per topic
+ * forces spread so the show covers AI *and* security *and* hardware, etc.
+ * The writer still picks the best segments — these only shape what it sees.
+ */
+export const SEED_QUERIES = [
+  "artificial intelligence and machine learning",
+  "programming languages and developer tools",
+  "security vulnerabilities and privacy",
+  "startups, funding and the tech industry",
+  "open source projects and releases",
+  "hardware, chips and infrastructure",
+] as const;
