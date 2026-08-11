@@ -48,3 +48,17 @@ export interface RadioScript {
   readonly outro: string;
   readonly wordCount: number; // counted server-side, never model self-report
 }
+
+export interface SegmentAudio {
+  readonly partId: string; // 'intro' | 'outro' | segment.id
+  readonly voice: string; // which host spoke it — Phase 6 labels the transcript
+  readonly audioHash: string; // sha256 hex; also the id in GET /api/audio/:hash
+  readonly durationSeconds: number;
+}
+
+export interface ShowAudio {
+  readonly modelId: string;
+  readonly dtype: string;
+  readonly totalDurationSeconds: number;
+  readonly parts: readonly SegmentAudio[]; // intro, five segments, outro (in order)
+}

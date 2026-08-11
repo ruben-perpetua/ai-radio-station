@@ -6,6 +6,7 @@ import { DefaultRetriever } from "../retrieval/retriever.js";
 import { OpenAiScriptWriter } from "../script/openai-script-writer.js";
 import { ChromaStore } from "../store/chroma-store.js";
 import { createApiRoutes } from "./routes/search.js";
+import { createAudioRoutes } from "./routes/audio.js";
 
 async function main(): Promise<void> {
   const provider = new OpenAiEmbeddingProvider();
@@ -20,6 +21,9 @@ async function main(): Promise<void> {
 
   const app = new Hono();
   app.route("/api", createApiRoutes({ retriever, provider, store, writer }));
+  // Serves cached WAVs by content hash. Independent of the model — the server
+  // only serves audio the CLI has already synthesised to disk.
+  app.route("/api", createAudioRoutes());
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`API listening on http://localhost:${info.port}`);

@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
+    "tts": "npm run tts --workspace apps/api --",
     "chroma": "docker compose up -d"
   },
   "devDependencies": {
