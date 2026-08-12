@@ -62,3 +62,25 @@ export interface ShowAudio {
   readonly totalDurationSeconds: number;
   readonly parts: readonly SegmentAudio[]; // intro, five segments, outro (in order)
 }
+
+// A flat, playable view of a show: script text and audio manifest merged into
+// one ordered list. The frontend indexes playback by array position, so folding
+// intro/outro into `parts` (rather than special-casing them) keeps the player
+// trivial. This is the contract served by GET /api/show/latest and /:showId.
+export interface ShowAudioSegment {
+  readonly id: string; // 'intro' | 'outro' | segment.id
+  readonly kind: "intro" | "segment" | "outro";
+  readonly headline?: string; // segments only
+  readonly text: string;
+  readonly sourceUrls: readonly string[];
+  readonly audioHash: string; // -> GET /api/audio/:hash
+  readonly durationSeconds: number;
+  readonly voice: string;
+}
+
+export interface Show {
+  readonly showId: string;
+  readonly createdAt: string; // ISO 8601
+  readonly totalDurationSeconds: number;
+  readonly parts: readonly ShowAudioSegment[];
+}

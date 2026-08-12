@@ -7,6 +7,7 @@ import { OpenAiScriptWriter } from "../script/openai-script-writer.js";
 import { ChromaStore } from "../store/chroma-store.js";
 import { createApiRoutes } from "./routes/search.js";
 import { createAudioRoutes } from "./routes/audio.js";
+import { createShowRoutes } from "./routes/show.js";
 
 async function main(): Promise<void> {
   const provider = new OpenAiEmbeddingProvider();
@@ -24,6 +25,8 @@ async function main(): Promise<void> {
   // Serves cached WAVs by content hash. Independent of the model — the server
   // only serves audio the CLI has already synthesised to disk.
   app.route("/api", createAudioRoutes());
+  // Reads the merged show artifacts from disk for the player frontend.
+  app.route("/api", createShowRoutes());
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     console.log(`API listening on http://localhost:${info.port}`);

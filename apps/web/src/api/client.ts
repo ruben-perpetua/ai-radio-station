@@ -58,6 +58,26 @@ export interface SearchParams {
   readonly maxDistance?: number;
 }
 
+// Flat, playable show view. Mirrors apps/api/src/domain/types.ts (Show /
+// ShowAudioSegment). The web app never imports server modules.
+export interface ShowAudioSegment {
+  readonly id: string;
+  readonly kind: "intro" | "segment" | "outro";
+  readonly headline?: string;
+  readonly text: string;
+  readonly sourceUrls: readonly string[];
+  readonly audioHash: string;
+  readonly durationSeconds: number;
+  readonly voice: string;
+}
+
+export interface Show {
+  readonly showId: string;
+  readonly createdAt: string;
+  readonly totalDurationSeconds: number;
+  readonly parts: readonly ShowAudioSegment[];
+}
+
 async function readError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
@@ -81,4 +101,21 @@ export async function search(params: SearchParams): Promise<SearchResponse> {
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as SearchResponse;
+}
+
+/** The URL an <audio> element loads for a given part. */
+export function audioUrl(hash: string): string {
+  return `/api/audio/${hash}`;
+}
+
+export async function fetchLatestShow(): Promise<Show> {
+  const res = await fetch("/api/show/latest");
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as Show;
+}
+
+export async function fetchShow(showId: string): Promise<Show> {
+  const res = await fetch(`/api/show/${encodeURIComponent(showId)}`);
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as Show;
 }
