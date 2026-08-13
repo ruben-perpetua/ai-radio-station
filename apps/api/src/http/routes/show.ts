@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { loadLatestShow, loadShowById } from "../../show/show-store.js";
+import { listShows, loadLatestShow, loadShowById } from "../../show/show-store.js";
 
 export function createShowRoutes(): Hono {
   const api = new Hono();
@@ -8,9 +8,14 @@ export function createShowRoutes(): Hono {
   api.get("/show/latest", async (c) => {
     const show = await loadLatestShow();
     if (!show) {
-      return c.json({ error: "No show available. Run npm run tts to build one." }, 404);
+      return c.json({ error: "No show available. Run npm run show:build to build one." }, 404);
     }
     return c.json(show);
+  });
+
+  // Summaries for the show picker, newest first.
+  api.get("/shows", async (c) => {
+    return c.json(await listShows());
   });
 
   api.get("/show/:showId", async (c) => {

@@ -2,7 +2,9 @@
   "name": "tech-radio",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -11,6 +13,7 @@
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
     "tts": "npm run tts --workspace apps/api --",
+    "show:build": "npm run show:build --workspace apps/api --",
     "chroma": "docker compose up -d"
   },
   "devDependencies": {

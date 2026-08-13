@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { Show, ShowAudioSegment } from "../domain/types.js";
+import type { Show, ShowAudioSegment, ShowSummary } from "../domain/types.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -117,7 +117,12 @@ async function listShowFiles(): Promise<string[]> {
   } catch {
     return []; // no shows directory yet
   }
-  return names.filter((n) => n.endsWith(".json")).map((n) => resolve(SHOWS_ROOT, n));
+  return names
+    .filter((n) => n.endsWith(".json"))
+    // Skip the bookkeeping files that live alongside artifacts: the aired-story
+    // history and the in-progress build state are not playable shows.
+    .filter((n) => n !== "history.json" && !n.endsWith(".state.json"))
+    .map((n) => resolve(SHOWS_ROOT, n));
 }
 
 /** The most recently modified playable show, or null if none exists. */
@@ -156,4 +161,32 @@ export async function loadShowById(id: string): Promise<Show | null> {
     if (show?.showId === id) return show;
   }
   return null;
+}
+
+/**
+ * All playable shows as lightweight summaries, newest first. Powers the show
+ * picker: the dedupe work is only visible if you can flip between episodes and
+ * hear that consecutive shows cover different stories.
+ */
+export async function listShows(): Promise<ShowSummary[]> {
+  const files = await listShowFiles();
+  const withTimes = await Promise.all(
+    files.map(async (path) => ({ path, mtime: (await stat(path)).mtimeMs })),
+  );
+  withTimes.sort((a, b) => b.mtime - a.mtime);
+
+  const summaries: ShowSummary[] = [];
+  for (const { path } of withTimes) {
+    const show = await loadFile(path);
+    if (!show) continue;
+    summaries.push({
+      showId: show.showId,
+      createdAt: show.createdAt,
+      totalDurationSeconds: show.totalDurationSeconds,
+      headlines: show.parts
+        .filter((p) => p.kind === "segment" && p.headline)
+        .map((p) => p.headline!),
+    });
+  }
+  return summaries;
 }

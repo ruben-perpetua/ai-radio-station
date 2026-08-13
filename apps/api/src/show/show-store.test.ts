@@ -11,8 +11,9 @@ test("merges script text and audio manifest into flat ordered parts", async () =
   assert.ok(show, "fixture show should load");
   // intro + five segments + outro.
   assert.equal(show.parts.length, 7);
-  assert.equal(show.parts[0].kind, "intro");
-  assert.equal(show.parts.at(-1)?.kind, "outro");
+  assert.equal(show.parts[0]?.kind, "intro");
+  const lastPart = show.parts[show.parts.length - 1];
+  assert.equal(lastPart?.kind, "outro");
   for (const part of show.parts) {
     assert.match(part.audioHash, /^[a-f0-9]{64}$/);
     assert.ok(part.durationSeconds > 0);

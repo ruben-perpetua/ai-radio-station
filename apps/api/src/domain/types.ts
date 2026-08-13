@@ -84,3 +84,54 @@ export interface Show {
   readonly totalDurationSeconds: number;
   readonly parts: readonly ShowAudioSegment[];
 }
+
+// A lightweight card for the show picker: enough to identify and pick an
+// episode without shipping every part's text and audio hash.
+export interface ShowSummary {
+  readonly showId: string;
+  readonly createdAt: string;
+  readonly totalDurationSeconds: number;
+  readonly headlines: readonly string[];
+}
+
+// Phase 7 — Show orchestration
+
+export interface AiredStory {
+  readonly documentId: string;
+  readonly canonicalUrl: string;
+  readonly headline: string;
+  readonly showId: string;
+  readonly airedAt: string; // ISO 8601
+}
+
+export interface ShowBuildMeta {
+  readonly seedQueries: readonly string[];
+  readonly documentsConsidered: number;
+  readonly documentsExcludedAsAired: number;
+  readonly chunksRetrieved: number;
+  readonly embeddingTokens: number;
+  readonly chatTokens: number;
+  readonly buildDurationSeconds: number;
+}
+
+export interface ShowBuildArtifact {
+  readonly showId: string;
+  readonly createdAt: string; // ISO 8601
+  readonly script: RadioScript;
+  readonly audio: ShowAudio;
+  readonly meta: ShowBuildMeta;
+}
+
+export type BuildStage = "ingested" | "indexed" | "scripted" | "synthesised" | "complete";
+
+export interface ShowBuildState {
+  readonly showId: string;
+  readonly stage: BuildStage;
+  readonly script?: RadioScript;
+  readonly audio?: ShowAudio;
+  readonly meta?: ShowBuildMeta;
+  // Stories the script cited, captured once the script exists so history can be
+  // updated after a resume without re-deriving the URL→document mapping.
+  readonly airedStories?: readonly AiredStory[];
+  readonly errors: readonly string[];
+}

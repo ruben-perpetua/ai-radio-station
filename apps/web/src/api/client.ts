@@ -78,6 +78,14 @@ export interface Show {
   readonly parts: readonly ShowAudioSegment[];
 }
 
+// Lightweight card for the show picker. Mirrors ShowSummary in the API.
+export interface ShowSummary {
+  readonly showId: string;
+  readonly createdAt: string;
+  readonly totalDurationSeconds: number;
+  readonly headlines: readonly string[];
+}
+
 async function readError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
@@ -118,4 +126,10 @@ export async function fetchShow(showId: string): Promise<Show> {
   const res = await fetch(`/api/show/${encodeURIComponent(showId)}`);
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as Show;
+}
+
+export async function fetchShows(): Promise<ShowSummary[]> {
+  const res = await fetch("/api/shows");
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as ShowSummary[];
 }

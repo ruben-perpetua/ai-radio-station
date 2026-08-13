@@ -47,9 +47,15 @@ function citedUrlsOutside(
 export class OpenAiScriptWriter implements ScriptWriter {
   private readonly client: OpenAI;
   private readonly model = env.OPENAI_CHAT_MODEL;
+  private tokens = 0;
 
   constructor(client?: OpenAI) {
     this.client = client ?? new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  }
+
+  /** Total chat tokens spent across every attempt — for the show `meta` block. */
+  get tokensUsed(): number {
+    return this.tokens;
   }
 
   async write(
@@ -147,6 +153,9 @@ export class OpenAiScriptWriter implements ScriptWriter {
       messages: [...messages],
       response_format: zodResponseFormat(scriptGenerationSchema, "radio_script"),
     });
+
+    // Accumulate usage before any early return so a retried generation counts.
+    this.tokens += completion.usage?.total_tokens ?? 0;
 
     const choice = completion.choices[0];
     if (!choice) throw new Error("model returned no choices");

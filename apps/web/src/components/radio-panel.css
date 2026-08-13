@@ -8,6 +8,28 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ---- show picker ---- */
+.show-picker {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.show-picker label {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.show-picker select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
 /* ---- transport ---- */
 .transport {
   position: sticky;

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchLatestShow, type Show } from "../api/client";
+import {
+  fetchLatestShow,
+  fetchShow,
+  fetchShows,
+  type Show,
+  type ShowSummary,
+} from "../api/client";
 import { usePlayer } from "../hooks/usePlayer";
 import { TransportControls } from "./TransportControls";
 import { Transcript } from "./Transcript";
@@ -11,13 +17,24 @@ type LoadState =
   | { readonly kind: "error"; readonly message: string }
   | { readonly kind: "ready"; readonly show: Show };
 
+/** A short, human label for the picker: date first, then the lead headline. */
+function summaryLabel(s: ShowSummary): string {
+  const date = s.createdAt.slice(0, 10);
+  const lead = s.headlines[0];
+  return lead ? `${date} — ${lead}` : date;
+}
+
 export function RadioPanel(): React.JSX.Element {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
+  const [shows, setShows] = useState<readonly ShowSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const loadShow = useCallback(async () => {
+  // Load one show: a specific id from the picker, or the latest by default.
+  const loadShow = useCallback(async (id?: string) => {
     setLoad({ kind: "loading" });
     try {
-      const show = await fetchLatestShow();
+      const show = id ? await fetchShow(id) : await fetchLatestShow();
+      setSelectedId(show.showId);
       setLoad({ kind: "ready", show });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to load show";
@@ -30,9 +47,43 @@ export function RadioPanel(): React.JSX.Element {
     }
   }, []);
 
+  // On mount, fetch the episode list so the picker is populated, then load the
+  // newest (or fall back to /latest when the list is empty or unavailable).
   useEffect(() => {
-    void loadShow();
+    let cancelled = false;
+    void (async () => {
+      let list: readonly ShowSummary[] = [];
+      try {
+        list = await fetchShows();
+      } catch {
+        list = []; // picker just stays hidden; the show still loads below
+      }
+      if (cancelled) return;
+      setShows(list);
+      await loadShow(list[0]?.showId);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [loadShow]);
+
+  const picker =
+    shows.length > 1 ? (
+      <div className="show-picker">
+        <label htmlFor="show-select">Episode</label>
+        <select
+          id="show-select"
+          value={selectedId ?? ""}
+          onChange={(e) => void loadShow(e.target.value)}
+        >
+          {shows.map((s) => (
+            <option key={s.showId} value={s.showId}>
+              {summaryLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+    ) : null;
 
   // The hook must be called unconditionally; it accepts null until a show loads.
   const show = load.kind === "ready" ? load.show : null;
@@ -41,6 +92,7 @@ export function RadioPanel(): React.JSX.Element {
   if (load.kind === "loading") {
     return (
       <div className="radio-panel">
+        {picker}
         <div className="skeleton skeleton-transport" />
         <div className="skeleton skeleton-line" />
         <div className="skeleton skeleton-line" />
@@ -52,10 +104,14 @@ export function RadioPanel(): React.JSX.Element {
   if (load.kind === "empty") {
     return (
       <div className="radio-panel">
+        {picker}
         <div className="empty-state">
           <p>{load.message}</p>
-          <p className="mono">npm run tts -- data/shows/&lt;date&gt;.json</p>
-          <button type="button" onClick={() => void loadShow()}>
+          <p className="mono">npm run show:build</p>
+          <button
+            type="button"
+            onClick={() => void loadShow(selectedId ?? undefined)}
+          >
             Reload
           </button>
         </div>
@@ -66,8 +122,12 @@ export function RadioPanel(): React.JSX.Element {
   if (load.kind === "error") {
     return (
       <div className="radio-panel">
+        {picker}
         <div className="error-banner">{load.message}</div>
-        <button type="button" onClick={() => void loadShow()}>
+        <button
+          type="button"
+          onClick={() => void loadShow(selectedId ?? undefined)}
+        >
           Retry
         </button>
       </div>
@@ -76,6 +136,7 @@ export function RadioPanel(): React.JSX.Element {
 
   return (
     <div className="radio-panel">
+      {picker}
       <TransportControls show={load.show} player={player} />
       <Transcript
         show={load.show}
