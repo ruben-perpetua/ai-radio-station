@@ -34,7 +34,7 @@ function chunk(url: string, rank: number): RetrievedChunk {
   };
 }
 
-/** A parsed structured-output payload with five segments. */
+/** A parsed structured-output payload with one segment per URL list. */
 function scriptPayload(sourceUrlsPerSegment: string[][]): unknown {
   return {
     intro: words(35),
@@ -72,14 +72,19 @@ test("accepts a grounded script and counts words server-side", async () => {
     ["https://example.com/0"],
     ["https://example.com/1"],
     ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
   ]);
   const writer = new OpenAiScriptWriter(fakeClient(payload));
 
-  const script = await writer.write(RETRIEVED, 360);
+  const script = await writer.write(RETRIEVED, 620);
 
-  assert.equal(script.segments.length, 5);
-  // 35 intro + 5*55 segment text + 35 outro = 345, computed here, not trusted.
-  assert.equal(script.wordCount, 345);
+  assert.equal(script.segments.length, 10);
+  // 35 intro + 10*55 segment text + 35 outro = 620, computed here, not trusted.
+  assert.equal(script.wordCount, 620);
   assert.ok(script.showId.length > 0);
   assert.ok(script.createdAt.length > 0);
 });
@@ -93,13 +98,36 @@ test("rejects a script citing a URL outside the retrieved set", async () => {
     ["https://evil.example/injected"],
     ["https://example.com/0"],
     ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
   ]);
   const writer = new OpenAiScriptWriter(fakeClient(payload));
 
   await assert.rejects(
-    () => writer.write(RETRIEVED, 360),
+    () => writer.write(RETRIEVED, 620),
     /not in the retrieved set/,
   );
+});
+
+test("accepts eight segments when ten distinct stories are not supported", async () => {
+  const payload = scriptPayload([
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+    ["https://example.com/0"],
+    ["https://example.com/1"],
+  ]);
+  const writer = new OpenAiScriptWriter(fakeClient(payload));
+
+  const script = await writer.write(RETRIEVED, 620);
+
+  assert.equal(script.segments.length, 8);
 });
 
 test("rejects a payload with the wrong segment count", async () => {

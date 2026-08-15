@@ -17,6 +17,19 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+/**
+ * Remove lone UTF-16 surrogates that cause JSON encoding failures.
+ * Surrogates must come in pairs (high + low). Lone surrogates are artifacts
+ * of malformed HTML character references and must be stripped.
+ */
+function sanitizeSurrogates(input: string): string {
+  // Remove high surrogates not followed by low surrogates
+  let result = input.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "");
+  // Remove low surrogates not preceded by high surrogates
+  result = result.replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  return result;
+}
+
 /** Split a paragraph into sentences, keeping terminal punctuation attached. */
 function splitSentences(paragraph: string): string[] {
   const matches = paragraph.match(/[^.!?]+[.!?]+(?:["')\]]+)?|\S[^.!?]*$/g);
@@ -40,7 +53,7 @@ export function chunkDocument(
 ): readonly Chunk[] {
   const { targetChars, overlapChars, minChars } = options;
 
-  const body = doc.text.trim();
+  const body = sanitizeSurrogates(doc.text).trim();
   if (body.length === 0) return [];
 
   // Atomic units: paragraphs, with oversized ones broken down so no single
@@ -88,15 +101,15 @@ export function chunkDocument(
   }
 
   const metadata: ChunkMetadata = {
-    title: doc.title,
-    url: doc.url,
-    sourceId: doc.sourceId,
-    publishedAt: doc.publishedAt,
+    title: sanitizeSurrogates(doc.title),
+    url: sanitizeSurrogates(doc.url),
+    sourceId: sanitizeSurrogates(doc.sourceId),
+    publishedAt: sanitizeSurrogates(doc.publishedAt),
     ...(doc.score !== undefined ? { score: doc.score } : {}),
   };
 
   return bodies.map((text, index) => {
-    const withTitle = `${doc.title}\n\n${text}`;
+    const withTitle = `${sanitizeSurrogates(doc.title)}\n\n${text}`;
     return {
       id: `${doc.id}:${index}`,
       documentId: doc.id,

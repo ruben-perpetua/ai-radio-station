@@ -78,6 +78,8 @@ test("token estimate tracks character count", () => {
 test("full prompt begins with the system instruction and includes the target", () => {
   const p = assemblePrompt([makeRetrieved("body", 0)], 360, "2026-08-05");
   assert.ok(p.full.startsWith(SYSTEM_INSTRUCTION));
+  assert.ok(SYSTEM_INSTRUCTION.includes("Between 8 and 10 is acceptable"));
   assert.ok(p.user.includes("2026-08-05"));
   assert.ok(p.user.includes("360 words"));
+  assert.ok(p.user.includes("8 to 10 segments"));
 });

@@ -82,7 +82,7 @@ export function DebugPanel(): React.JSX.Element {
       </form>
 
       <div className="controls-row">
-        <label>
+        <label className="text-color">
           top-k:{" "}
           <input
             type="number"
@@ -92,7 +92,7 @@ export function DebugPanel(): React.JSX.Element {
             onChange={(e) => setTopK(Number(e.target.value))}
           />
         </label>
-        <label>
+        <label className="text-color">
           <input
             type="checkbox"
             checked={maxDistanceOn}
@@ -109,7 +109,7 @@ export function DebugPanel(): React.JSX.Element {
           disabled={!maxDistanceOn}
           onChange={(e) => setMaxDistance(Number(e.target.value))}
         />
-        <span className="mono">
+        <span className="mono text-color">
           {maxDistanceOn ? maxDistance.toFixed(2) : "off"}
         </span>
       </div>

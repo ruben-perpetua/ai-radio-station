@@ -75,6 +75,19 @@ function decodeEntities(input: string): string {
 }
 
 /**
+ * Remove lone UTF-16 surrogates that cause JSON encoding failures.
+ * Surrogates must come in pairs (high + low). Lone surrogates are artifacts
+ * of malformed HTML character references and must be stripped.
+ */
+function sanitizeSurrogates(input: string): string {
+  // Remove high surrogates not followed by low surrogates
+  let result = input.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "");
+  // Remove low surrogates not preceded by high surrogates
+  result = result.replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  return result;
+}
+
+/**
  * Turn feed/API HTML into plain text safe to read aloud: block tags become
  * paragraph breaks (so the chunker still sees `\n\n` boundaries), remaining
  * tags are dropped, entities are decoded, and whitespace is normalised.
@@ -85,7 +98,7 @@ export function cleanText(input: string): string {
     "\n\n",
   );
   const stripped = withBreaks.replace(/<[^>]*>/g, "");
-  return decodeEntities(stripped)
+  return sanitizeSurrogates(decodeEntities(stripped))
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n */g, "\n")

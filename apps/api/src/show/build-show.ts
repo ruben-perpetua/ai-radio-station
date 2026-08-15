@@ -43,6 +43,30 @@ import { DEFAULT_TARGET_WORDS } from "../script/prompt.js";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const RAW_ROOT = resolve(REPO_ROOT, "data", "raw");
 
+/**
+ * Remove lone UTF-16 surrogates that cause JSON encoding failures.
+ * Sanitizes all string fields in a Document.
+ */
+function sanitizeDocument(doc: Document): Document {
+  const sanitize = (s: string): string => {
+    // Remove high surrogates not followed by low surrogates
+    let result = s.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "");
+    // Remove low surrogates not preceded by high surrogates
+    result = result.replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+    return result;
+  };
+  return {
+    ...doc,
+    title: sanitize(doc.title),
+    url: sanitize(doc.url),
+    text: sanitize(doc.text),
+    ...(doc.author !== undefined ? { author: sanitize(doc.author) } : {}),
+    sourceId: sanitize(doc.sourceId),
+    publishedAt: sanitize(doc.publishedAt),
+    fetchedAt: sanitize(doc.fetchedAt),
+  };
+}
+
 /** Ordered pipeline stages; a build resumes from the last one it completed. */
 const STAGES: readonly BuildStage[] = [
   "ingested",
@@ -131,7 +155,8 @@ async function readRawDocuments(buildId: string): Promise<Document[]> {
   const files = (await readdir(dayDir)).filter((f) => f.endsWith(".json"));
   const docs: Document[] = [];
   for (const file of files) {
-    docs.push(JSON.parse(await readFile(resolve(dayDir, file), "utf8")) as Document);
+    const raw = JSON.parse(await readFile(resolve(dayDir, file), "utf8")) as Document;
+    docs.push(sanitizeDocument(raw));
   }
   return docs;
 }
@@ -176,6 +201,9 @@ async function ingestDocuments(buildId: string): Promise<Document[]> {
     }
     docs = enriched;
   }
+
+  // Sanitize all documents before persisting, to prevent JSON encoding errors later.
+  docs = docs.map(sanitizeDocument);
 
   const dayDir = resolve(RAW_ROOT, buildId);
   await mkdir(dayDir, { recursive: true });

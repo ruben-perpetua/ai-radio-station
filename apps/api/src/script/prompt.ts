@@ -1,7 +1,7 @@
 import type { RetrievedChunk } from "../domain/types.js";
 
 /** Default show length. Models drift, so this is a target, not a guarantee. */
-export const DEFAULT_TARGET_WORDS = 360;
+export const DEFAULT_TARGET_WORDS = 1270;
 
 /** Markers that fence off untrusted retrieved text from the instructions. */
 export const DATA_START =
@@ -24,8 +24,9 @@ VOICE AND FORMAT
 - No markdown, no bullet points, no headings, no emoji — every character is read aloud.
 - Expand things a text-to-speech engine mishandles: say "GPT-4" not "GPT4",
   "twenty twenty-six" not "2026", "percent" not "%", "dollars" not "$".
-- Intro about 35 words. Each segment about 55 words. Outro about 35 words.
-- Exactly 5 segments.
+- Intro about 35 words. Each segment about 120 words. Outro about 35 words.
+- Aim for 10 segments. Between 8 and 10 is acceptable if the retrieved stories
+  do not support ten distinct, worthwhile items.
 
 GROUNDING
 - Every factual claim must be supported by the retrieved articles below.
@@ -101,7 +102,7 @@ export function buildUserPrompt(
   const context = assembleContext(chunks);
   return (
     `Today is ${date}. Write today's show.\n` +
-    `Target: ${targetWords} words total across intro, five segments, and outro.\n\n` +
+    `Target: ${targetWords} words total across 8 to 10 segments, plus intro and outro.\n\n` +
     context
   );
 }

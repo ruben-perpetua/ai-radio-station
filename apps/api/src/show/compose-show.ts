@@ -15,7 +15,7 @@ const TOP_K_PER_SEED = 8;
  */
 const MAX_DISTANCE = 0.6;
 
-/** Enough distinct stories for the model to choose five good segments from. */
+/** Enough distinct stories for the model to choose ten good segments from. */
 const MAX_DOCUMENTS = 12;
 
 export interface ComposeShowDeps {

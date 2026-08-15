@@ -9,19 +9,32 @@ function estimateTokens(text: string): number {
 }
 
 /**
+ * Remove lone UTF-16 surrogates that cause JSON encoding failures in Chroma.
+ * This is the final defense before sending to the API.
+ */
+function sanitizeSurrogates(text: string): string {
+  // Remove high surrogates not followed by low surrogates
+  let result = text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "");
+  // Remove low surrogates not preceded by high surrogates
+  result = result.replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  return result;
+}
+
+/**
  * Flatten a chunk's identity + metadata into Chroma-safe primitives. Chroma
  * rejects nested objects and arrays in metadata, so everything must be a
- * string, number, or boolean on the way in.
+ * string, number, or boolean on the way in. Sanitize all strings to remove
+ * lone UTF-16 surrogates that cause JSON encoding failures.
  */
 function toChromaMetadata(chunk: Chunk): Metadata {
   const m = chunk.metadata;
   const meta: Record<string, string | number | boolean> = {
     documentId: chunk.documentId,
     index: chunk.index,
-    title: m.title,
-    url: m.url,
-    sourceId: m.sourceId,
-    publishedAt: m.publishedAt,
+    title: sanitizeSurrogates(m.title),
+    url: sanitizeSurrogates(m.url),
+    sourceId: sanitizeSurrogates(m.sourceId),
+    publishedAt: sanitizeSurrogates(m.publishedAt),
   };
   if (m.score !== undefined) meta.score = m.score;
   return meta;
@@ -124,7 +137,7 @@ export class ChromaStore implements VectorStore {
       await collection.upsert({
         ids: slice.map((c) => c.id),
         embeddings: vectorSlice.map((v) => [...v]),
-        documents: slice.map((c) => c.text),
+        documents: slice.map((c) => sanitizeSurrogates(c.text)),
         metadatas: slice.map(toChromaMetadata),
       });
     }

@@ -30,7 +30,8 @@ const persistedScriptSchema = z.object({
         sourceUrls: z.array(z.string().url()).min(1),
       }),
     )
-    .length(5),
+    .min(8)
+    .max(10),
   outro: z.string().min(1),
   wordCount: z.number(),
 });

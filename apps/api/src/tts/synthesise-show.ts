@@ -8,7 +8,7 @@ interface ShowPart {
   readonly text: string;
 }
 
-/** intro, then the five segments in order, then outro — the order we speak. */
+/** intro, then the 8-10 segments in order, then outro — the order we speak. */
 function orderedParts(script: RadioScript): ShowPart[] {
   return [
     { partId: "intro", text: script.intro },

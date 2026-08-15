@@ -8,11 +8,16 @@ import { radioScriptSchema, scriptGenerationSchema, type ValidatedScript } from 
 import type { ScriptWriter } from "./script-writer.js";
 
 /** Accept a little drift around the target; only rewrite outside this band. */
-const MIN_WORDS = 300;
-const MAX_WORDS = 450;
+const WORD_BAND = 0.25; // ±25% of the target
+function wordBand(targetWords: number): { min: number; max: number } {
+  return {
+    min: Math.round(targetWords * (1 - WORD_BAND)),
+    max: Math.round(targetWords * (1 + WORD_BAND)),
+  };
+}
 
-/** One generation plus at most one corrective retry. A third call is not worth it. */
-const MAX_ATTEMPTS = 2;
+/** One generation plus two corrective retries for the structural contract. */
+const MAX_ATTEMPTS = 3;
 
 type MessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -68,6 +73,7 @@ export class OpenAiScriptWriter implements ScriptWriter {
 
     const allowedUrls = new Set(chunks.map((c) => c.chunk.metadata.url));
     const date = new Date().toISOString().slice(0, 10);
+    const band = wordBand(targetWords);
 
     const messages: MessageParam[] = [
       { role: "system", content: SYSTEM_INSTRUCTION },
@@ -82,10 +88,14 @@ export class OpenAiScriptWriter implements ScriptWriter {
       const validation = radioScriptSchema.safeParse(raw);
       if (!validation.success) {
         if (attempt < MAX_ATTEMPTS) {
+          const segmentIssue = validation.error.issues.find(
+            (issue) => issue.path.length === 1 && issue.path[0] === "segments",
+          );
           messages.push({
             role: "user",
             content:
-              "That response was not valid. Return exactly five segments, each " +
+              `That response was not valid${segmentIssue ? `: ${segmentIssue.message}` : ""}. ` +
+              "Return 8 to 10 segments, aiming for 10, each " +
               "with a non-empty headline, non-empty text, and at least one valid " +
               "source URL taken from the retrieved articles.",
           });
@@ -99,14 +109,14 @@ export class OpenAiScriptWriter implements ScriptWriter {
       const script = validation.data;
       const badUrls = citedUrlsOutside(script, allowedUrls);
       const wordCount = countWords(script);
-      const budgetOk = wordCount >= MIN_WORDS && wordCount <= MAX_WORDS;
+      const budgetOk = wordCount >= band.min && wordCount <= band.max;
 
       if (badUrls.length === 0 && budgetOk) {
         return this.finalize(script, wordCount);
       }
 
       if (attempt < MAX_ATTEMPTS) {
-        messages.push({ role: "user", content: this.feedback(badUrls, wordCount, targetWords) });
+        messages.push({ role: "user", content: this.feedback(badUrls, wordCount, targetWords, band) });
         continue;
       }
 
@@ -121,7 +131,7 @@ export class OpenAiScriptWriter implements ScriptWriter {
       // Only the word budget is off. A slightly long or short show is not worth
       // a third paid call — accept it and log.
       console.warn(
-        `show word count ${wordCount} outside ${MIN_WORDS}-${MAX_WORDS}; accepting.`,
+        `show word count ${wordCount} outside ${band.min}-${band.max}; accepting.`,
       );
       return this.finalize(script, wordCount);
     }
@@ -130,7 +140,12 @@ export class OpenAiScriptWriter implements ScriptWriter {
     throw new Error("script generation exhausted its attempts");
   }
 
-  private feedback(badUrls: string[], wordCount: number, target: number): string {
+  private feedback(
+    badUrls: string[],
+    wordCount: number,
+    target: number,
+    band: { min: number; max: number },
+  ): string {
     const parts: string[] = [];
     if (badUrls.length > 0) {
       parts.push(
@@ -138,7 +153,7 @@ export class OpenAiScriptWriter implements ScriptWriter {
           `${badUrls.join(", ")}. Only cite URLs that appear in the data block.`,
       );
     }
-    if (wordCount < MIN_WORDS || wordCount > MAX_WORDS) {
+    if (wordCount < band.min || wordCount > band.max) {
       parts.push(
         `That was ${wordCount} words. Rewrite at ${target} words total, ` +
           `cutting or expanding detail rather than changing the number of segments.`,

@@ -21,9 +21,9 @@ export const scriptGenerationSchema = z.object({
 
 /**
  * The real contract. We parse the model's response through this even though it
- * was generated under a JSON schema — belt and braces. It enforces exactly five
+ * was generated under a JSON schema — belt and braces. It enforces 8–10
  * non-empty segments, at least one valid source URL per segment, and non-empty
- * intro/outro. Anything that does not fit is rejected, not repaired.
+ * intro/outro. Anything outside the contract is rejected.
  */
 export const radioScriptSchema = z.object({
   intro: z.string().min(1),
@@ -35,7 +35,8 @@ export const radioScriptSchema = z.object({
         sourceUrls: z.array(z.string().url()).min(1),
       }),
     )
-    .length(5),
+    .min(8)
+    .max(10),
   outro: z.string().min(1),
 });
 

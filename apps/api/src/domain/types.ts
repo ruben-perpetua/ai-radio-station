@@ -60,7 +60,7 @@ export interface ShowAudio {
   readonly modelId: string;
   readonly dtype: string;
   readonly totalDurationSeconds: number;
-  readonly parts: readonly SegmentAudio[]; // intro, five segments, outro (in order)
+  readonly parts: readonly SegmentAudio[]; // intro, 8-10 segments, outro (in order)
 }
 
 // A flat, playable view of a show: script text and audio manifest merged into

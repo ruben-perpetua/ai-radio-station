@@ -179,3 +179,7 @@
   max-height: 420px;
   overflow: auto;
 }
+
+.text-color {
+  color: #f4f3ec;
+}
